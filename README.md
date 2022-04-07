@@ -1,0 +1,2 @@
+# InvestigateFidelity
+  Fidelity can be defined as “the degree to which an intervention is carried out as it was described and originally tested and/or as the developer intended”. The aim of the project is to measure the bias during effect estimation when implementation is not 100 %. Therefore, different implementation trajectories related to fidelity are modeled and can be compared in parallel and Stepped wedge design trials.
