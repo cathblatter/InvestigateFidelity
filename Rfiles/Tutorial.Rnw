@@ -1,0 +1,655 @@
+\documentclass{article}
+\usepackage[a4paper, total={6.5in, 9in}]{geometry}
+\usepackage{hyperref}
+
+\newcommand{\Rfunction}[1]{{\texttt{#1}}}
+\newcommand{\Robject}[1]{{\texttt{#1}}}
+\newcommand{\Rpackage}[1]{{\textit{#1}}}
+\newcommand{\R}[1]{{\textit{#1}}}
+
+
+\title{Tutorial to article 'The XXX role of fidelity in hybrid implementation trials: simulation study and guidance for implementation researchers'}
+\author{Diana Trutschel, XXX}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section{Introduction}
+With this Tutorial the main simulation experiment and their results from the corresponding article 'The XXX role of fidelity in hybrid implementation trials: simulation study and guidance for implementation researchers' is demonstrated. 
+
+Cluster randomized trials (CRTs) differ from individually randomized trials in that the unit of randomization is a structure above the individual participant or patient, e.g. clusters are hospitals or nursing homes.
+Within implementation research there are different CRT designs that are commonly used. For the purpose of this study we will focus on parallel and stepped wedge CRT designs. 
+In parallel CRT designs, one group of clusters receives the intervention and one group the control condition over all time points. In a stepped-wedge design at each timepoint one cluster switches from the control condition to the intervention. The time point at which a cluster switches from the control to the intervention condition is usually determined at random. 
+
+
+In practice deviations from the assumed perfect situation within trails exists. 
+For example, deviations can be: despite of a delay other patterns of deviation from a 100\% implementation of intervention. 
+Nevertheless, to date, the influence of such deviations from the perfect planned trial on the effect estimations  are not well investigated.
+The aim of the simulation study within the article was to identify the effect of different scenarios on the estimation of an intervention effect for a typical cluster randomized trial in the field of health care research.
+
+
+Data of a cluster randomzed trial can be simulated by sampling from the multidimensional normal distribution. This can be realized with the provided package \Rpackage{samplingDataCRT}~\footnote{\url{https://cran.r-project.org/web/packages/samplingDataCRT/index.html}}. 
+
+
+For the simulation experiment we separate into I) fidelity pattern, which reflect the interesting deviations from perfect situations and are defined in scenarios of the simulation experiment, and II) parameters, which are included in the used statistical model regarding the specific design.
+
+
+\subsection{Preliminaries}
+
+Several R-packages are needed during the implementationa and data visualisation, load them as follows:
+
+
+<<loadPAckage,echo=TRUE>>=
+#load the package
+
+library(lme4)
+#library(here)
+library(ggplot2)
+#library(gridExtra)
+#library(xtable)
+@
+
+
+More specific, for the simulations a package and some implemented functions are essential.
+First, download the provided package \Rpackage{samplingDataCRT} from CRAN under~\url{https://cran.r-project.org/web/packages/samplingDataCRT/index.html}. Use this package and the additionally provided functions for this specific simulation \Robject{functions.R} under GPL~\footnote{\url{https://www.gnu.org/licenses/}}. Load them as follows:
+
+<<loadFunctions,echo=TRUE>>=
+
+#install.packages("samplingDataCRT")
+#load the package
+library(samplingDataCRT)
+
+source("functions.R")
+source("functionsPatterns.R")
+ 
+@
+
+For further explanation of the usage of this package please read the provided Vignette of the 
+\Rpackage{samplingDataCRT}~\footnote{\url{https://cran.r-project.org/web/packages/samplingDataCRT/vignettes/my-vignette.pdf}}. Additional packages are also needed:
+
+In the following the tutorial is separated in three parts, showing the use for:
+
+\begin{itemize}
+\item Perfect situations in parallel and Stepped wedges designs
+\item Fidelity patterns in parallel and Stepped wdges designs
+\item Comparison of several Fidelity patterns for one design
+\end{itemize}
+
+Within each part one simulation step includes three necessary steps:
+
+\begin{enumerate}
+\item Determining the design matrix regarding the chosen design
+\item Sampling data
+\item Effect estimation from the data
+\end{enumerate}
+After repeating these three steps for one design a calculation of performance is possible from the results.
+
+
+
+<<seed, echo=TRUE>>=
+
+set.seed(1234)
+@
+
+
+\section{Perfect situations in parallel and Stepped wedges designs}
+
+\subsection{Determining the design matrix regarding the chosen design}
+
+Based on the example in the main article, we specify a hypothetical example including parameter settings for a reference setup of the simulation experiment. In the following we used a cross-sectional SWD with ten clusters, six time points (five steps) and ten individuals within each cluster and time point (see Table 1 in the article). All parameters can be adapted to a own practical example.
+
+
+<<setting, echo=TRUE>>=
+######################################################
+#using the parameter setting of Table 1 in the article
+######################################################
+
+## Design ##
+############
+type<-"cross-sec" # study design type = cross-sectional
+
+K<-7 #number of measurement
+I<-6 #number of cluster
+Sw<-1 #number of cluster switches per time point
+J<-10 #Subjects =  Number of individuals per cluster
+
+
+## Model parameter ##
+####################
+mu.0<- 10           # Baseline mean
+theta <- 1          # intervention effect
+betas<-rep(0, K-1)  # no Time trend, but could be included
+
+sigma.1<-2    # variability within or error variance (H&H sigma)
+sigma.2<-NULL
+sigma.3<-sigma.1*sqrt(0.001/(1-0.001))    # between clusters variability (H&H tau)
+
+#resulting ICC
+(ICC<-sigma.3^2/(sigma.3^2+sigma.1^2))
+@
+
+
+With a given between cluster variance of \Sexpr{sigma.3} and a error variance of \Sexpr{sigma.1}, the resulting ICC is \Sexpr{ICC} (see Table 1 in the article). The resulting reference design matrix can be create manually or by the povided function \Rfunction{designMatrix()}.
+
+
+<<design,echo=TRUE>>=
+#for SWD design
+(X<-designMatrix(nC=I, nT=K, nSw=Sw)) #design matrix of "SWD" with given setting
+@
+
+A complete dataset for a SWD with a given setup can be sampled by the given function \Rfunction{sampleData()}, which also needs the complete data design matrix and the covariance-variance matrix for the data given the design provided by the functions 
+\Rfunction{completeDataDesignMatrix()} and \Rfunction{CovMat.Design()}. The sampled data can then be analysed by a linear mixed model with the function \Rfunction{lmer()} of the package \Rpackage{lme4}, hence the parameter of the model will be estimated. 
+This process will be used repeatedly through the simulation experiment within each scenario setting.
+
+\subsection{Sampling data}
+
+<<sampleDataset,echo=TRUE>>=
+
+#complete data design matrix
+D<-completeDataDesignMatrix(J, X)
+#covariance-variance matrix for the data given the design
+V<-CovMat.Design(K, J, I, sigma.1=sigma.1, sigma.3=sigma.3)
+#corresponding fixed effects
+parameters<-c(mu.0, betas, theta)
+#sample complete data given the setup
+sample.data<-sampleData(type = type, K=K,J=J,I=I, D=D, V=V, parameters=parameters)
+#show the number of observations within the SWD
+xtabs(~cluster+measurement, data=sample.data)
+
+@
+
+\subsection{Effect estimation from the data}
+
+<<EffectEstimation,echo=TRUE>>=
+
+#analysis of the two-level data by a linear mixe model
+lme4::lmer(val~intervention+measurement + (1|cluster), data=sample.data)
+
+@
+
+\subsection{Calculation of performance}
+
+Need of Simulation parameter how often a simulation should be repeated.
+
+<<SimuRep, echo=TRUE>>=
+
+##Simu
+anzSim<-1000
+
+@
+
+<<SysStart.1,echo=FALSE, warning=FALSE, message=FALSE>>=
+start_time <- Sys.time()
+@
+
+<<Performance,echo=TRUE, warning=FALSE, message=FALSE>>=
+
+res.all<-NULL
+  for(s in 1:anzSim){ ##Repeats simulation
+    
+    #sample Data
+    #################
+    sample.data<-sampleData(type = type, K=K,J=J,I=I, D=D, V=V, parameters=parameters)
+    
+    #analysis of the two-level data by a linear mixe model
+    ######################################################
+    lm.res<-lme4::lmer(val~intervention+measurement + (1|cluster), data=sample.data)
+    lm.0<-lmer(val~ measurement+(1|cluster), data=sample.data) 
+    
+    #Estimates
+    ##########
+    #random effects
+    res.ran<-as.data.frame(summary(lm.res)$varcor)[,5]^2
+    names(res.ran)<-as.data.frame(summary(lm.res)$varcor)[,1]
+    #fixed efects
+    res.fix<-fixef(lm.res)[-1]
+    #SE of fixed effect estimates
+    SEs<-coef(summary(lm.res))[-1,"Std. Error"]
+    names(SEs)<-paste("SE.",names(SEs), sep="")
+    #anova for intervention
+    anova.p<-anova(lm.res,lm.0)[8][2,1]
+    
+    #results
+    res.all<-rbind(res.all, c(res.ran,res.fix, SEs, p.intervention=anova.p))
+  }
+
+@
+ 
+ 
+<<SysEnd.1,echo=FALSE, warning=FALSE, message=FALSE>>=
+end_time <- Sys.time()
+#(end_time - start_time)
+
+@
+
+
+Repeating the simulation \Sexpr{anzSim} times for this design a computational time of \Sexpr{round(as.numeric((end_time - start_time), units = "mins"),2)}  min is needed.
+
+After repeating the steps of the simulation the obtained effect estimates can be evaluated for the performance of the model.
+We use the provided R-function\Rfunction{performanceMeas()} to calulate the following performance measures of a simulation:
+
+\begin{itemize}
+\item Bias: mean deviation of the estimates from the true value of the parameter of interest (intervention effect) is an indicator of accuracy
+\item Coverage: measurement used to control the Type I error rate for testing the null hypothesis (H0) of no effect
+\item Power: proportion of simulation samples in which the H0 of no effect is rejected at a significance level of $\alpha$ when H0 is false (is related to the empirical Type II error rate)
+\end{itemize}
+
+<<ResultsPerformance,echo=TRUE, warning=FALSE, message=FALSE>>=
+
+#size of results matrix is number of repeats x 17 (parameters)
+dim(res.all)
+
+#Summary of all repeats
+########################
+summEst<-colMeans(res.all)
+names(summEst)<-paste(names(summEst), "Mean",".")
+
+#Calculation of Performance
+###########################
+perf.intervention<-performanceMeas(res.all[,"intervention"], 
+                                   res.all[,"SE.intervention"], 
+                                   res.all[,"p.intervention"], 
+                                   theta)
+names(perf.intervention)<-paste(names(perf.intervention),"Intervention",sep=".")
+
+# average estimated intervention effect
+perf.intervention["AvEst.Intervention"]
+# EmpSE.Intervention
+perf.intervention["EmpSE.Intervention"]
+# Bias.Intervention
+perf.intervention["Bias.Intervention"]
+# Coverage.Intervention
+perf.intervention["Coverage.Intervention"]
+# Power.Intervention
+perf.intervention["Power.Intervention"]
+
+@
+
+
+To simplify the process of the simulation the R-function \Rfunction{simulation()} is provided. The usage is shown here for a parallel design trail.
+
+<<ParalllelDesign,echo=TRUE, warning=FALSE, message=FALSE>>=
+
+#design matrix of SWD with given setting
+(X<-designMatrix(nC=I, nT=K, nSw=round(I/2), design="parallel"))
+@
+
+
+The function includes the steps: data sampling for a specific design, effect estimation, performance measures calculation. The input of the function is the specification parameter of the chosen design (including study design, number of cluster, time points and individuals per cluster) and assumed model parameters (effect, variances, ...), as well as the number of repeats for the simulation.
+
+
+<<SysStart.2,echo=FALSE, warning=FALSE, message=FALSE>>=
+start_time <- Sys.time()
+@
+
+
+<<SimulationFunction,echo=TRUE, warning=FALSE, message=FALSE>>=
+
+#perfect
+res.Simu<-simulation(anzSim=anzSim,type="cross-sec", 
+                   sigma.1=sigma.1,sigma.3=sigma.3,
+                   K=K,J=J,I=I,mu.0=mu.0, theta=theta,betas=betas,
+                   X=X, X.A=X)
+@
+
+
+<<SysEnd.2,echo=FALSE, warning=FALSE, message=FALSE>>=
+end_time <- Sys.time()
+#(end_time - start_time)
+
+@
+
+
+Repeating the simulation \Sexpr{anzSim} times for this design a computational time of \Sexpr{round(as.numeric((end_time - start_time), units = "mins"),2)}  min is needed.
+
+The output of the function is then the mean estimates of the model and the performance measures of the simulation. 
+
+
+<<SimulationFunctionResults,echo=TRUE, warning=FALSE, message=FALSE>>=
+
+#size of results matrix is number of repeats x 17 (parameters)
+length(res.Simu)
+#mean estimated intervention effect
+res.Simu["intervention Mean ."]
+#estimated power
+res.Simu["Power.Intervention"]
+
+@
+
+
+Comparing both designs, stepped wedge versus parallel design, with the same conditions (number of time points, cluster and individuals per cluster), we obtain for the first a power of \Sexpr{round(perf.intervention["Power.Intervention"],2)} and for the parallel design \Sexpr{round(res.Simu["Power.Intervention"],2)}. This shows, that using a parallel or stepped wedge designed cluster randomized trail with \Sexpr{I} clusters, \Sexpr{K} time points and a cluster size of \Sexpr{J} under perfect implementation condition results in equivalent ability to detect an intervention effect of $1$.
+
+
+
+\section{Fidelity patterns regarding implementation error}
+
+Fidelity refers to the degree to which an intervention was implemented as it was prescribed or intended. 
+We aim to include different patterns of how fidelity might increase over time to estimate the respective effects on power of the study. To decribe hypothetical fidelity patterns of increasing fidelity (slow, linear, fast) different mathematical functions (i.e. logistic, linear and exponential curves) are implemented. By considering different values for the slope parameter we can cover a range of fidelity patterns. For our calculation within the simulation we use fractional values of intervention effects to define the degree of deviation from 100\% implementation. 
+
+In the following example, ....
+
+<<Simulation_one, echo=TRUE>>=
+
+#################################################
+#setting the categories of Table 2 in the article
+#################################################
+
+## different impelementation patterns ##
+#######################################
+# perfect implementation
+X
+#parameter Fidelity specification
+###############################
+
+#Fid.T1<-Fid.T1.seq[fid]
+Fid.T1<-0.4
+Fid.End<-0.8
+
+#parameter tunes the slope for the log and exp functions
+slope.seq<-0.3
+  
+#exponential function for slow increase
+(res.exp<-find.Fidelity.exp(time.points=K, Fid.End, Fid.T1, par.slope=slope.seq))
+(A1.exp <-implemMatrix.parallel(nC=I, nT=K, nSw=round(I/2), 
+                                pattern=res.exp[,"Fidelity.Prozent"]/100))
+#X.A<-A1.exp
+
+#logistic function for fast increase
+(res.log<-find.Fidelity.log(time.points=K, Fid.End, Fid.T1, par.slope=slope.seq))
+(A1.log <-implemMatrix.parallel(nC=I, nT=K, nSw=round(I/2), 
+                                pattern=res.log[,"Fidelity.Prozent"]/100))
+#X.A<-A1.log 
+
+#slope for linear function
+m<-(Fid.T1-Fid.End)/(1-(K-1))
+#linear increase
+(res.lin<-find.Fidelity.linear(time.points=K, Fid.End, Fid.T1))
+# design matrix of a learning impelementation pattern, linear
+(A1.lin <-implemMatrix.parallel(nC=I, nT=K, nSw=round(I/2), 
+                                pattern=res.lin[,"Fidelity.Prozent"]/100))
+#X.A<-A1.lin
+
+@
+
+For the whole simulation experiment fractional intervention effects to define the degree of deviation from 100\% implementation, as well as all design and model parameters has to be determined. Using the parallel design trial example from above and assume a linear increase of fidelity from \Sexpr{Fid.T1} to \Sexpr{Fid.End} from time point 1 to the end of trial (time point \Sexpr{K}), we can again use the provided function for the simulation.
+
+
+<<SimulationFunction.lin,echo=TRUE, warning=FALSE, message=FALSE>>=
+
+X.A<-A1.lin
+#linear increase of fidelity
+res.Simu.lin<-simulation(anzSim=anzSim,type="cross-sec", 
+                   sigma.1=sigma.1,sigma.3=sigma.3,
+                   K=K,J=J,I=I,mu.0=mu.0, theta=theta,betas=betas,
+                   X=X, X.A=X)
+
+#estimated power
+res.Simu.lin["Power.Intervention"]
+@
+
+ We obtain for a power of \Sexpr{round(res.Simu.lin["Power.Intervention"],2)}, hence a difference to the perfect situation of 
+ \Sexpr{round((res.Simu["Power.Intervention"]-res.Simu.lin["Power.Intervention"]),2)}.
+
+\section{Comparison of several Fidelity patterns for one design}
+
+Assuming the desing choises are determined by resources and fidelity is assumed for the investigation of an intervention after implemtation e.g. by prior studies, we can provide the effect of the increase of fidelity on the power of the study.
+Assuming, again, an increase of fidelity from \Sexpr{Fid.T1} to \Sexpr{Fid.End} from time point after implementation (T+1) to the end of trial (time point \Sexpr{K}), we can sue the simulation function for several degrees of increase.
+
+
+<<FidelityPatterns,echo=TRUE, warning=FALSE, message=FALSE>>=
+
+#points of time after intervention, for SWD is one less
+#T.points<-K-1
+#points of time after intervention
+T.points<-K
+
+####several Slopes indicating the degree of increase
+slope.seq<-round(exp(1)^(seq(-2,2,1)),2)
+nr.sl<-length(slope.seq)
+
+####Pattern calculation
+#######################
+res.plot.Patterns<-NULL
+
+#for all slopes
+for(sl in slope.seq){
+      #determine fractional values and save
+      #for logarithmic
+      res<-data.frame(find.Fidelity.log(time.points=T.points, Fid.End, Fid.T1, par.slope=sl)
+                      , FUN="log", slope=sl)
+      res.plot.Patterns<-rbind(res.plot.Patterns, res)
+      
+      #for exponential
+      res<-data.frame(find.Fidelity.exp(time.points=T.points, Fid.End, Fid.T1, par.slope=sl)
+                      , FUN="exp", slope=sl)
+      res.plot.Patterns<-rbind(res.plot.Patterns, res)
+      
+}
+#linear
+res.lin<-data.frame(find.Fidelity.linear(time.points=T.points, Fid.End, Fid.T1)
+                     , FUN="linear", slope=1)
+res.plot.Patterns<-rbind(res.plot.Patterns, res.lin)
+    
+@
+
+
+<<FidelityPatternsPlot,eval=TRUE, echo=FALSE, warning=FALSE, message=FALSE, fig.width=8, fig.height=8 , fig.cap="Several fidelity patterns of increase">>=
+
+res.plot.Patterns$slope<-as.factor(res.plot.Patterns$slope)
+res.plot.Patterns<-data.frame(res.plot.Patterns, 
+                              grp=as.factor(with(res.plot.Patterns, paste(FUN, slope,sep=":"))))
+#levels(res.plot.Patterns$FUN)
+res.plot.Patterns$FUN <- factor(res.plot.Patterns$FUN, levels = c("log"  ,  "linear",  "exp"   ))
+    
+#plot with ggplot2 package
+gg.FidPat<-ggplot(data=res.plot.Patterns, aes(x=time, y=Fidelity.Prozent, #col=FUN, 
+                                                  lty=slope, group=grp)) +
+      geom_line()+
+      geom_point(aes(shape=FUN))+
+      #ylab("Fidelity (%)")+
+      #xlab("Time points after intervention implementation")+
+      #scale_y_continuous(labels=c("Start", 'End'), breaks=c(Fid.T1,Fid.End)*100, name="Fidelity (%)")+
+      theme_bw()+
+      labs(shape="Fidelity \nincrease", lty="Level of \nabsolute \ndifference \nto linear", 
+           x="Time points after intervention implementation", y="Fidelity (%)")+
+      #scale_color_discrete(labels=c("fast","slow", "linear"))+
+      scale_shape_discrete(labels=c("fast", "linear","slow"))+
+      scale_linetype_discrete(labels=rev(1:5))+
+      scale_y_continuous(labels=c("Start", 'End'), breaks=c(Fid.T1,Fid.End)*100)
+
+gg.FidPat   
+# #ff<-"FidelityPatternsSimu_article.png"
+# ff<-"FidelityPatternsSimu_article_sw.png"
+# ggsave(ff, width = 7, height = 8, dpi=300)
+
+@
+
+Figure~\ref{fig:FidelityPatternsPlot} shows then the possible fiedlity patterns for increase, which are determined.
+
+To compare the effect of different degrees of increasing fidelity after implementation against perfect trials, we have to repeat the simulation for these different degrees but same settings. Take again the example from above: cross-sectional parallel trial with ten clusters (5 of them getting the intervention, 5 of them not), six time points and ten individuals within each cluster and time point. We assume a fidelity of \Sexpr{Fid.T1} at the beginning and \Sexpr{Fid.End} at the end of trial for the intervention group. We investigate on total 7 different fidelity patttern increases, 3 fast increases, 1 linear and 3 slow increases.
+
+<<Simulation_diffFidelity, echo=TRUE, warnings=FALSE, message=FALSE, error=FALSE>>=
+
+##lower number of Simulation steps with the loss of precision
+anzSim<-100
+
+################################
+# perfect implementation
+# no individual or cluster miss
+################################
+start_time <- Sys.time()
+
+#design matrix of perfect situation
+X<-designMatrix(nC=I, nT=K, nSw=round(I/2), design="parallel")
+res<-simulation(anzSim=anzSim,type="cross-sec", 
+                   sigma.1=sigma.1,sigma.3=sigma.3,
+                   K=K,J=J,I=I,mu.0=mu.0, theta=theta,betas=betas,
+                   X=X, X.A=X)
+# res.Sim.diffFid<-as.data.frame( t(res))
+# asign<-as.data.frame( t(c(type="cross-sec", noClust=I, noTime=K, ClusSize=J,  ICC=ICC,
+#                         A="A: perfect", B="individual miss", C=0, D="perfect", 
+#                         slope=0, sort=1, Fid.Begin=1, Fid.END=1)))
+# res.Sim.diffFid<-cbind(res.Sim.diffFid,
+#                        asign)
+res.Sim.diffFid<-as.data.frame(t(
+                      c(res, 
+                      type="cross-sec", noClust=I, noTime=K, ClusSize=J,  ICC=ICC,
+                        A="A: perfect", B="individual miss", C=0, D="perfect", 
+                        slope=0, sort=1, Fid.Begin=1, Fid.END=1)))
+#save results in file
+file.tmp<-paste("./results/parallel_results_", 1, "_", 1, ".csv", sep="")
+write.table(res.Sim.diffFid, file=file.tmp)
+
+####several Slopes indicating the degree of increase
+slope.seq<-round(exp(1)^(seq(-2,2,2)),2)
+nr.sl<-length(slope.seq)
+
+
+###all the other patterns
+res.Simu<-NULL
+
+#exponential increase
+for(sl in 1:nr.sl){
+    
+    res.exp<-find.Fidelity.exp(time.points=K, Fid.End, Fid.T1, par.slope=slope.seq[sl])
+    A1.exp <-implemMatrix.parallel(nC=I, nT=K, nSw=round(I/2), 
+                                    pattern=res.exp[,"Fidelity.Prozent"]/100)
+    res<-simulation(anzSim=anzSim,type="cross-sec", sigma.1=sigma.1,sigma.3=sigma.3,
+                       K=K,J=J,I=I,mu.0=mu.0, theta=theta,betas=betas,
+                       X=X, X.A=A1.exp)
+    res.Simu<-rbind(res.Simu,
+                    as.data.frame(t(c(
+                      res, 
+                      type="cross-sec", noClust=I, noTime=K, ClusSize=J,  ICC=ICC,
+                      A="A: learning", B="individual miss", C=0,
+                      D="exp", slope=slope.seq[sl], sort=2+nr.sl+(nr.sl-sl+1),
+                     Fid.Begin=Fid.T1, Fid.END=Fid.End)))
+    )
+
+}
+#logistic increase
+for(sl in 1:nr.sl){
+    res.log<-find.Fidelity.log(time.points=K, Fid.End, Fid.T1, par.slope=slope.seq[sl])
+    A1.log <-implemMatrix.parallel(nC=I, nT=K, nSw=round(I/2), 
+                                   pattern=res.log[,"Fidelity.Prozent"]/100)
+    res<-simulation(anzSim=anzSim,type="cross-sec", sigma.1=sigma.1,sigma.3=sigma.3,
+                       K=K,J=J,I=I,mu.0=mu.0, theta=theta,betas=betas,
+                       X=X, X.A=A1.log)
+    res.Simu<-rbind(res.Simu,
+                    as.data.frame(t(c(
+                      res, 
+                      type="cross-sec", noClust=I, noTime=K, ClusSize=J,  ICC=ICC,
+                      A="A: learning", B="individual miss", C=0,
+                      D="log", slope=slope.seq[sl], sort=1+sl
+                      , Fid.Begin=Fid.T1, Fid.END=Fid.End)))
+    )
+  }
+
+##linear increase
+m<-(Fid.T1-Fid.End)/(1-(K-1))
+res.lin<-find.Fidelity.linear(time.points=K, Fid.End, Fid.T1)
+A1.lin <-implemMatrix.parallel(nC=I, nT=K, nSw=round(I/2), 
+                               pattern=res.lin[,"Fidelity.Prozent"]/100)
+res<-simulation(anzSim=anzSim,type="cross-sec", sigma.1=sigma.1,sigma.3=sigma.3,
+                     K=K,J=J,I=I,mu.0=mu.0, theta=theta,betas=betas,
+                     X=X, X.A=A1.lin)
+res.Simu<-rbind(res.Simu,
+                  as.data.frame(t(c(
+                    res, 
+                    type="cross-sec", noClust=I, noTime=K, ClusSize=J,  ICC=ICC,
+                    A="A: learning", B="individual miss", C=0,
+                    D="linear", slope=0, sort=2+nr.sl
+                    , Fid.Begin=Fid.T1, Fid.END=Fid.End)))
+)
+
+
+# res.tmp<-cbind(res.Simu,
+#                Fid.Begin=rep(Fid.T1, dim(res.Simu)[1]), 
+#                Fid.END=rep(Fid.End, dim(res.Simu)[1])
+#                )
+
+file.tmp<-paste("./results/parallel_results_", Fid.T1, "_", Fid.End, ".csv", sep="")
+write.table(res.Simu, file=file.tmp)
+
+end_time <- Sys.time()
+time.1<-(end_time - start_time)
+
+res.plot<-rbind(res.Simu,res.Sim.diffFid)
+res.plot[,c("D","slope","Power.Intervention")]
+
+@
+
+
+<<saved,eval=TRUE, echo=FALSE, warning=FALSE, message=FALSE>>=
+
+#####read.table all files in path
+file.res<-list.files("results/", full.names = TRUE)
+#print(file.res)
+
+res.plot.2<-NULL
+for(i in 1:(length(file.res))){
+  
+  res.i<-read.table(file.res[[i]])
+  res.plot.2<-rbind(res.plot.2, res.i)
+}
+#print(res.plot.2)
+
+@
+
+
+<<FidelityPatternsPlot.Several,eval=TRUE, echo=FALSE, warning=FALSE, message=FALSE, fig.width=8, fig.height=8 , fig.cap="Power regarding fidelity patterns">>=
+
+res.plot<-subset(res.plot.2, 
+                 select=c("Bias.Intervention","Coverage.Intervention" , "Power.Intervention" ,
+                          #"type", "noClust" ,"noTime" ,"ClusSize", "ICC",
+                          #"A" ,"B","C",                     
+                          "D", "slope", "sort", "Fid.END", "Fid.Begin"))
+
+#str(res.plot)
+res.plot$slope<-as.factor(res.plot$slope)
+#res.plot$sort<-as.factor(res.plot$sort)
+res.plot$Fid.END <-as.factor(res.plot$Fid.END*100 )
+res.plot$Fid.Begin <-as.factor(res.plot$Fid.Begin*100 )
+#res.plot$D<-factor(res.plot$D, levels=c("log","linear","exp","perfect"))
+
+#txt<-subset(res.plot, subset=(Fid.END==1)&(Fid.Begin==0.4)|(Fid.END==1)&(Fid.Begin==1), select=c("D", 'slope', "sort"))
+#txt.xlab<-paste(txt$D, txt$slope, sep="-")[order(txt$sort)]
+#txt.xlab<-c("perfect", paste("L+",3:1,sep=""), "L0",paste("L-",1:3,sep=""))
+
+res.plot<-res.plot[with(res.plot, order(sort)), ]
+res.plot.decr<-res.plot[with(res.plot, order(sort, decreasing = TRUE)), ]
+
+ggplot(res.plot, aes(x=sort, y=Power.Intervention, pch=D))+
+  geom_point(size=1)+
+  geom_vline(xintercept = nr.sl+2, lty=2, col="grey")+
+  geom_hline(yintercept=0.8, lty=2, col="red")+
+  theme_bw()+
+  theme(legend.position="none",
+        #legend.position="bottom",legend.box="vertical",
+        #axis.text.x = element_text(angle = 90),
+        axis.text.y=element_text(size=12),
+        axis.text.x=element_text(size=14),
+        axis.title=element_text(size=14),
+        axis.ticks.x = element_blank()
+        )+
+  #scale_x_continuous(labels=txt.xlab, breaks=1:length(txt.xlab))+
+  scale_x_continuous(labels=c("perfect", "fast", "linear", "slow"), 
+                     breaks=c(1,nr.sl/2+1,nr.sl+2,nr.sl+2+nr.sl/2))+
+  #scale_shape_discrete(labels=c("fast (L+)", "linear (L0)","slow (L-)", "perfect"))+
+  labs(#title="SWD Design",
+       #shape="Fidelity speed", 
+       #col="Fidelity change \n (Start:End)", fill="Fidelity Start",
+       # pch="",
+       x="Increase of Fidelity over time", y="Power")+
+  #guides(fill=TRUE)+
+  #guides(fill = guide_legend(override.aes = list(shape = NA)))+
+  ylim(0.25,1)
+@
+
+Figure~\ref{fig:FidelityPatternsPlot.Several} shows then a comparison of loss of power for the several fidelity patterns towards the perfect situation.
+For tthe complete simulation with \Sexpr{anzSim} repeats each, a computaltional time of \Sexpr{round(as.numeric(time.1, units = "mins"),2)}  min is needed.
+
+\end{document}
+
+
